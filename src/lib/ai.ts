@@ -15,6 +15,34 @@ interface IdeaInput {
   tags: string[];
 }
 
+// --- Idea Generation Types ---
+
+export interface GenerateIdeasInput {
+  market: string;
+  niche?: string;
+  audience?: string;
+  budget?: string;
+  category?: string;
+  count: number;
+  existingSlugs: string[];
+}
+
+export interface GeneratedIdea {
+  name: string;
+  slug: string;
+  tagline: string;
+  description: string;
+  category: string;
+  status: string;
+  targetMarket: string;
+  tam: string;
+  pricing: string;
+  stack: string[];
+  effort: string;
+  revenueModel: string;
+  tags: string[];
+}
+
 export interface AnalysisResult {
   marketAnalysis: string;
   competitors: string;
@@ -87,4 +115,140 @@ WICHTIG: Antworte NUR mit dem JSON-Objekt, kein Markdown, keine Erklärungen.`;
     }
     throw new Error("Failed to parse AI analysis response");
   }
+}
+
+function parseJsonFromResponse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (jsonMatch) return JSON.parse(jsonMatch[0]);
+    const objMatch = text.match(/\{[\s\S]*\}/);
+    if (objMatch) return JSON.parse(objMatch[0]);
+    throw new Error("Failed to parse JSON from AI response");
+  }
+}
+
+export async function generateIdeas(input: GenerateIdeasInput): Promise<GeneratedIdea[]> {
+  const categoryConstraint = input.category && input.category !== "all"
+    ? `Generate ideas ONLY in the "${input.category}" category.`
+    : `Use a mix of these categories: ai-departments, saas, marketplace, agency, content, vertical, consumer, infrastructure, moonshot.`;
+
+  const budgetHint = input.budget
+    ? `Budget context: ${input.budget}. Tailor pricing and effort accordingly.`
+    : "";
+
+  const prompt = `Du bist ein erfahrener Startup-Stratege und Business-Ideengenerator.
+
+Generiere exakt ${input.count} einzigartige, umsetzbare Geschäftsideen basierend auf diesen Parametern:
+
+**Markt/Nische:** ${input.market}
+${input.niche ? `**Spezifische Nische:** ${input.niche}` : ""}
+${input.audience ? `**Zielgruppe:** ${input.audience}` : ""}
+${budgetHint}
+${categoryConstraint}
+
+**WICHTIG — Diese Slugs existieren bereits, verwende sie NICHT:** ${input.existingSlugs.slice(0, 100).join(", ")}
+
+Jede Idee MUSS diese Felder haben:
+- name: Einzigartiger, einprägsamer Produktname
+- slug: Aus dem Namen generiert (lowercase, Bindestriche, keine Sonderzeichen)
+- tagline: Ein Satz, max 80 Zeichen, der sofort den Wert kommuniziert
+- description: Mindestens 100 Wörter. Konkreter Use Case, Marktchance, Differenzierung, warum JETZT
+- category: Einer von: ai-departments, saas, marketplace, agency, content, vertical, consumer, infrastructure, moonshot
+- status: "brainstorm"
+- targetMarket: Zielmarkt mit Größenordnung
+- tam: Total Addressable Market mit konkreter Zahl
+- pricing: Konkretes Pricing-Modell mit Zahlen
+- stack: Array mit 3-5 relevanten Technologien
+- effort: Einer von: 1-week, 2-weeks, 1-month, 3-months, 6-months, 1-year
+- revenueModel: Wie wird Geld verdient
+- tags: Array mit 3-6 relevanten Tags (lowercase)
+
+Fokus auf DACH-Markt UND globale Chancen. Ideen müssen realistisch, differenziert und sofort umsetzbar sein.
+
+Antworte NUR mit einem JSON-Array, kein Markdown, keine Erklärungen:
+[{ "name": "...", ... }, ...]`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6-20250514",
+    max_tokens: 8000,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const parsed = parseJsonFromResponse(text) as GeneratedIdea[];
+
+  return parsed.map((idea) => ({
+    name: idea.name || "Unnamed Idea",
+    slug: (idea.slug || idea.name || "idea")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, ""),
+    tagline: idea.tagline || "",
+    description: idea.description || "",
+    category: idea.category || "saas",
+    status: "brainstorm",
+    targetMarket: idea.targetMarket || "",
+    tam: idea.tam || "",
+    pricing: idea.pricing || "",
+    stack: Array.isArray(idea.stack) ? idea.stack : [],
+    effort: idea.effort || "1-month",
+    revenueModel: idea.revenueModel || "",
+    tags: Array.isArray(idea.tags) ? idea.tags : [],
+  }));
+}
+
+export async function generateVariations(idea: IdeaInput): Promise<GeneratedIdea[]> {
+  const prompt = `Du bist ein Startup-Stratege. Basierend auf dieser Geschäftsidee, generiere 3-5 VARIATIONEN:
+
+**Original-Idee:**
+- Name: ${idea.name}
+- Tagline: ${idea.tagline}
+- Beschreibung: ${idea.description}
+- Kategorie: ${idea.category}
+- Zielmarkt: ${idea.targetMarket}
+- Pricing: ${idea.pricing}
+- Tech Stack: ${idea.stack.join(", ")}
+
+Variationen können sein:
+1. Anderer Zielmarkt (z.B. DACH → Global, B2B → B2C)
+2. Anderes Pricing-Modell (z.B. SaaS → Marketplace → Pay-per-use)
+3. Anderer Tech-Ansatz (z.B. Voice statt Text, Mobile statt Web)
+4. Nischen-Version (z.B. nur für Ärzte, nur für Anwälte)
+5. Enterprise-Version oder Consumer-Version
+
+Jede Variation muss ein VOLLSTÄNDIGES Ideen-Objekt sein mit:
+name, slug, tagline, description (100+ Wörter), category, status ("brainstorm"), targetMarket, tam, pricing, stack, effort, revenueModel, tags
+
+Antworte NUR mit einem JSON-Array:
+[{ "name": "...", ... }, ...]`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6-20250514",
+    max_tokens: 6000,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const parsed = parseJsonFromResponse(text) as GeneratedIdea[];
+
+  return parsed.map((v) => ({
+    name: v.name || "Variation",
+    slug: (v.slug || v.name || "variation")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, ""),
+    tagline: v.tagline || "",
+    description: v.description || "",
+    category: v.category || idea.category,
+    status: "brainstorm",
+    targetMarket: v.targetMarket || "",
+    tam: v.tam || "",
+    pricing: v.pricing || "",
+    stack: Array.isArray(v.stack) ? v.stack : [],
+    effort: v.effort || "1-month",
+    revenueModel: v.revenueModel || "",
+    tags: Array.isArray(v.tags) ? v.tags : [],
+  }));
 }

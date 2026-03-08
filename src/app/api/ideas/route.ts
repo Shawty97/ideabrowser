@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 
-// GET /api/ideas — list all ideas with vote counts
+// GET /api/ideas — list all ideas with vote counts and sorting
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const category = searchParams.get("category");
   const status = searchParams.get("status");
   const search = searchParams.get("search");
+  const sort = searchParams.get("sort") || "new";
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {};
   if (category && category !== "all") where.category = category;
   if (status && status !== "all") where.status = status;
@@ -25,19 +27,54 @@ export async function GET(req: NextRequest) {
     where,
     include: {
       votes: { select: { value: true } },
+      analyses: { select: { score: true }, orderBy: { createdAt: "desc" }, take: 1 },
       _count: { select: { comments: true, analyses: true } },
     },
-    orderBy: { id: "asc" },
+    orderBy: sort === "new" ? { createdAt: "desc" } : { id: "asc" },
   });
 
-  const result = ideas.map((idea) => ({
-    ...idea,
-    voteCount: idea.votes.reduce((sum, v) => sum + v.value, 0),
-    commentCount: idea._count.comments,
-    hasAnalysis: idea._count.analyses > 0,
-    votes: undefined,
-    _count: undefined,
-  }));
+  const now = Date.now();
+  const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
+
+  const result = ideas.map((idea) => {
+    const voteCount = idea.votes.reduce((sum, v) => sum + v.value, 0);
+    const commentCount = idea._count.comments;
+    const analysisScore = idea.analyses[0]?.score ?? 0;
+    const ageMs = now - idea.createdAt.getTime();
+    const recency = Math.max(0, 1 - ageMs / oneWeekMs);
+    const compositeScore =
+      analysisScore * 0.4 +
+      voteCount * 0.3 * 10 +
+      recency * 0.2 * 100 +
+      commentCount * 0.1 * 10;
+
+    return {
+      ...idea,
+      voteCount,
+      commentCount,
+      hasAnalysis: idea._count.analyses > 0,
+      analysisScore,
+      compositeScore: Math.round(compositeScore * 100) / 100,
+      votes: undefined,
+      analyses: undefined,
+      _count: undefined,
+    };
+  });
+
+  switch (sort) {
+    case "hot":
+      result.sort((a, b) => b.compositeScore - a.compositeScore);
+      break;
+    case "voted":
+      result.sort((a, b) => b.voteCount - a.voteCount);
+      break;
+    case "score":
+      result.sort((a, b) => b.analysisScore - a.analysisScore);
+      break;
+    case "new":
+    default:
+      break;
+  }
 
   return NextResponse.json(result);
 }

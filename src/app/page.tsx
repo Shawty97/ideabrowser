@@ -8,6 +8,8 @@ import { Filters } from "@/components/filters";
 import { UserMenu } from "@/components/user-menu";
 import Link from "next/link";
 
+type SortOption = "hot" | "new" | "top-voted" | "highest-score";
+
 interface IdeaFromAPI {
   id: number;
   name: string;
@@ -26,6 +28,20 @@ interface IdeaFromAPI {
   voteCount: number;
   commentCount: number;
   hasAnalysis: boolean;
+  analysisScore: number | null;
+  aiGenerated?: boolean;
+  createdAt?: string;
+}
+
+function compositeScore(idea: IdeaFromAPI): number {
+  const analysisScoreComponent = (idea.analysisScore ?? 0) * 0.4;
+  const voteComponent = idea.voteCount * 10 * 0.3;
+  const now = Date.now();
+  const createdAt = idea.createdAt ? new Date(idea.createdAt).getTime() : now;
+  const daysSinceCreation = Math.max(1, (now - createdAt) / 86400000);
+  const recencyComponent = (1 / daysSinceCreation) * 100 * 0.2;
+  const commentComponent = idea.commentCount * 5 * 0.1;
+  return analysisScoreComponent + voteComponent + recencyComponent + commentComponent;
 }
 
 export default function HomePage() {
@@ -35,6 +51,7 @@ export default function HomePage() {
   const [category, setCategory] = useState<Category | "all">("all");
   const [status, setStatus] = useState<Status | "all">("all");
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortOption>("hot");
 
   useEffect(() => {
     fetch("/api/ideas")
@@ -47,7 +64,7 @@ export default function HomePage() {
   }, []);
 
   const filtered = useMemo(() => {
-    return ideas.filter((idea) => {
+    let result = ideas.filter((idea) => {
       if (category !== "all" && idea.category !== category) return false;
       if (status !== "all" && idea.status !== status) return false;
       if (search) {
@@ -61,13 +78,42 @@ export default function HomePage() {
       }
       return true;
     });
-  }, [ideas, category, status, search]);
+
+    // Sort
+    switch (sort) {
+      case "hot":
+        result = [...result].sort((a, b) => compositeScore(b) - compositeScore(a));
+        break;
+      case "new":
+        result = [...result].sort((a, b) => {
+          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return bTime - aTime;
+        });
+        break;
+      case "top-voted":
+        result = [...result].sort((a, b) => b.voteCount - a.voteCount);
+        break;
+      case "highest-score":
+        result = [...result].sort((a, b) => (b.analysisScore ?? 0) - (a.analysisScore ?? 0));
+        break;
+    }
+
+    return result;
+  }, [ideas, category, status, search, sort]);
+
+  const trending = useMemo(() => {
+    return [...ideas]
+      .sort((a, b) => compositeScore(b) - compositeScore(a))
+      .slice(0, 5);
+  }, [ideas]);
 
   const stats = useMemo(() => {
     const active = ideas.filter((i) => i.status === "active").length;
     const withAnalysis = ideas.filter((i) => i.hasAnalysis).length;
     const categories = new Set(ideas.map((i) => i.category)).size;
-    return { total: ideas.length, active, analyzed: withAnalysis, categories };
+    const aiGenCount = ideas.filter((i) => i.aiGenerated).length;
+    return { total: ideas.length, active, analyzed: withAnalysis, categories, aiGenerated: aiGenCount };
   }, [ideas]);
 
   return (
@@ -80,6 +126,12 @@ export default function HomePage() {
           </span>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href="/generate"
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 transition-colors"
+          >
+            Generate Ideas
+          </Link>
           {session?.user && (
             <Link
               href="/submit"
@@ -98,9 +150,22 @@ export default function HomePage() {
           Idea<span className="text-indigo-500">Browser</span>
         </h1>
         <p className="mx-auto max-w-2xl text-lg text-zinc-400">
-          {stats.total} curated AI business ideas with deep market analysis,
+          {stats.total} AI business ideas with deep market analysis,
           revenue projections, and instant build capability via Business OS.
         </p>
+
+        {/* Generate CTA */}
+        <div className="mt-6">
+          <Link
+            href="/generate"
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-emerald-600 px-8 py-3 font-semibold text-white hover:from-indigo-500 hover:to-emerald-500 transition-all"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Generate Custom Ideas with AI
+          </Link>
+        </div>
 
         {/* Stats */}
         <div className="mt-8 flex justify-center gap-8">
@@ -123,16 +188,57 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <Filters
-        selectedCategory={category}
-        selectedStatus={status}
-        searchQuery={search}
-        onCategoryChange={setCategory}
-        onStatusChange={setStatus}
-        onSearchChange={setSearch}
-        resultCount={filtered.length}
-      />
+      {/* Trending This Week */}
+      {!loading && trending.length > 0 && (
+        <div className="mb-10">
+          <h2 className="mb-4 text-lg font-bold text-white">Trending This Week</h2>
+          <div className="grid gap-3 sm:grid-cols-5">
+            {trending.map((idea, i) => (
+              <Link
+                key={idea.id}
+                href={`/idea/${idea.slug}`}
+                className="group flex items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 hover:border-zinc-600 transition-colors"
+              >
+                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 text-xs font-bold text-indigo-400">
+                  {i + 1}
+                </span>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-white group-hover:text-indigo-400 transition-colors">
+                    {idea.name}
+                  </div>
+                  <div className="truncate text-xs text-zinc-500">{idea.tagline}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Sort + Filters */}
+      <div className="mb-4 flex items-center justify-between">
+        <Filters
+          selectedCategory={category}
+          selectedStatus={status}
+          searchQuery={search}
+          onCategoryChange={setCategory}
+          onStatusChange={setStatus}
+          onSearchChange={setSearch}
+          resultCount={filtered.length}
+        />
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-zinc-500">Sort:</label>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortOption)}
+            className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-white focus:border-indigo-500 focus:outline-none"
+          >
+            <option value="hot">Hot</option>
+            <option value="new">New</option>
+            <option value="top-voted">Top Voted</option>
+            <option value="highest-score">Highest Score</option>
+          </select>
+        </div>
+      </div>
 
       {/* Grid */}
       {loading ? (
@@ -147,8 +253,14 @@ export default function HomePage() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="py-20 text-center text-zinc-500">
-          No ideas match your filters. Try adjusting your search.
+        <div className="py-20 text-center">
+          <p className="text-zinc-500 mb-4">No ideas match your filters. Try adjusting your search.</p>
+          <Link
+            href="/generate"
+            className="inline-flex rounded-lg bg-indigo-600 px-6 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
+          >
+            Generate Custom Ideas
+          </Link>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -160,6 +272,15 @@ export default function HomePage() {
 
       {/* Footer */}
       <footer className="mt-16 border-t border-zinc-800 pt-8 text-center text-sm text-zinc-600">
+        <div className="flex flex-wrap justify-center gap-4 mb-3">
+          <a href="https://a-impact.io" className="text-indigo-500 hover:underline">A-Impact</a>
+          <span className="text-zinc-700">|</span>
+          <a href="https://business-os-v2-mu.vercel.app" className="text-zinc-500 hover:text-zinc-300">Business OS</a>
+          <span className="text-zinc-700">|</span>
+          <a href="https://colony.a-impact.io" className="text-zinc-500 hover:text-zinc-300">Colony</a>
+          <span className="text-zinc-700">|</span>
+          <a href="https://robert-kopi.com" className="text-zinc-500 hover:text-zinc-300">Robert Kopi</a>
+        </div>
         <p>
           IdeaBrowser by{" "}
           <a href="https://a-impact.io" className="text-indigo-500 hover:underline">

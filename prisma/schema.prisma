@@ -8,20 +8,21 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
-  role          String    @default("user")
-  accounts      Account[]
-  sessions      Session[]
-  votes         Vote[]
-  comments      Comment[]
-  submissions   Idea[]    @relation("SubmittedIdeas")
-  analyses      Analysis[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id             String           @id @default(cuid())
+  name           String?
+  email          String           @unique
+  emailVerified  DateTime?
+  image          String?
+  role           String           @default("user")
+  accounts       Account[]
+  sessions       Session[]
+  votes          Vote[]
+  comments       Comment[]
+  submissions    Idea[]           @relation("SubmittedIdeas")
+  analyses       Analysis[]
+  generationRuns GenerationRun[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@map("ib_users")
 }
@@ -79,6 +80,10 @@ model Idea {
   effort       String
   revenueModel String
   tags         String[]
+  parentId     Int?
+  parent       Idea?     @relation("IdeaVariations", fields: [parentId], references: [id])
+  children     Idea[]    @relation("IdeaVariations")
+  aiGenerated  Boolean   @default(false)
   submittedBy  String?
   submitter    User?     @relation("SubmittedIdeas", fields: [submittedBy], references: [id])
   votes        Vote[]
@@ -132,4 +137,19 @@ model Comment {
 
   @@index([ideaId])
   @@map("ib_comments")
+}
+
+model GenerationRun {
+  id             String   @id @default(cuid())
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id])
+  market         String
+  niche          String?
+  audience       String?
+  category       String?
+  count          Int
+  ideasGenerated Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@map("ib_generation_runs")
 }
