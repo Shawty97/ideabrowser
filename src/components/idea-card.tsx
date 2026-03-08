@@ -24,10 +24,12 @@ interface IdeaCardProps {
   };
   isBookmarked?: boolean;
   onBookmarkToggle?: (ideaId: number, bookmarked: boolean) => void;
+  isComparing?: boolean;
+  onCompareToggle?: (ideaId: number) => void;
 }
 
-export function IdeaCard({ idea, isBookmarked = false, onBookmarkToggle }: IdeaCardProps) {
-  const { data: session } = useSession();
+export function IdeaCard({ idea, isBookmarked = false, onBookmarkToggle, isComparing = false, onCompareToggle }: IdeaCardProps) {
+  const { data: session, status: sessionStatus } = useSession();
   const [bookmarked, setBookmarked] = useState(isBookmarked);
   const [bookmarkLoading, setBookmarkLoading] = useState(false);
 
@@ -90,6 +92,39 @@ export function IdeaCard({ idea, isBookmarked = false, onBookmarkToggle }: IdeaC
               strokeLinecap="round"
               strokeLinejoin="round"
               d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+            />
+          </svg>
+        </button>
+      )}
+
+      {/* Compare toggle */}
+      {onCompareToggle && (
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onCompareToggle(idea.id);
+          }}
+          className={`absolute right-4 z-10 rounded-lg p-1.5 transition-colors ${
+            sessionStatus === "loading" || session?.user ? "top-12" : "top-4"
+          } ${
+            isComparing
+              ? "text-indigo-400 hover:text-indigo-300 bg-indigo-500/10"
+              : "text-zinc-600 hover:text-zinc-400"
+          }`}
+          title={isComparing ? "Remove from comparison" : "Add to comparison"}
+        >
+          <svg
+            className="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
             />
           </svg>
         </button>

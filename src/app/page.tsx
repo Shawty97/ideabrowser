@@ -7,6 +7,7 @@ import { IdeaCard } from "@/components/idea-card";
 import { Filters } from "@/components/filters";
 import { UserMenu } from "@/components/user-menu";
 import { EcosystemFooter } from "@/components/ecosystem-footer";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 type SortOption = "hot" | "new" | "top-voted" | "highest-score";
@@ -83,6 +84,10 @@ export default function HomePage() {
 
   // Bookmarks state
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<number>>(new Set());
+
+  // Comparison state
+  const [compareIds, setCompareIds] = useState<Set<number>>(new Set());
+  const routerNav = useRouter();
 
   // Intersection observer ref for infinite scroll
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -242,6 +247,23 @@ export default function HomePage() {
       }
       return next;
     });
+  }
+
+  function handleCompareToggle(ideaId: number) {
+    setCompareIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(ideaId)) {
+        next.delete(ideaId);
+      } else if (next.size < 3) {
+        next.add(ideaId);
+      }
+      return next;
+    });
+  }
+
+  function goToCompare() {
+    const idsArray = Array.from(compareIds);
+    routerNav.push(`/compare?ids=${idsArray.join(",")}`);
   }
 
   return (
@@ -431,6 +453,8 @@ export default function HomePage() {
               idea={idea}
               isBookmarked={bookmarkedIds.has(idea.id)}
               onBookmarkToggle={handleBookmarkToggle}
+              isComparing={compareIds.has(idea.id)}
+              onCompareToggle={handleCompareToggle}
             />
           ))}
         </div>
@@ -448,6 +472,32 @@ export default function HomePage() {
           {!hasMore && ideas.length > 0 && !loading && (
             <p className="text-sm text-zinc-600">All {totalCount} ideas loaded</p>
           )}
+        </div>
+      )}
+
+      {/* Floating Compare Bar */}
+      {compareIds.size >= 2 && (
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
+          <div className="flex items-center gap-4 rounded-2xl border border-indigo-500/30 bg-zinc-900/95 px-6 py-3 shadow-2xl backdrop-blur-sm">
+            <span className="text-sm text-zinc-300">
+              {compareIds.size} ideas selected
+            </span>
+            <button
+              onClick={goToCompare}
+              className="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 transition-colors"
+            >
+              Compare {compareIds.size} Ideas
+            </button>
+            <button
+              onClick={() => setCompareIds(new Set())}
+              className="rounded-lg p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors"
+              title="Clear selection"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       )}
 

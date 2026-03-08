@@ -5,15 +5,41 @@ import { AnalysisPanel } from "@/components/analysis-panel";
 import { VoteButton } from "@/components/vote-button";
 import { CommentSection } from "@/components/comment-section";
 import { EcosystemFooter } from "@/components/ecosystem-footer";
+import { ExportButton } from "@/components/export-button";
 import { auth } from "@/lib/auth";
 import Link from "next/link";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const idea = await prisma.idea.findUnique({ where: { slug } });
+  const idea = await prisma.idea.findUnique({
+    where: { slug },
+    select: { name: true, tagline: true, description: true, tags: true, slug: true },
+  });
+
+  if (!idea) {
+    return { title: "IdeaBrowser" };
+  }
+
+  const title = `${idea.name} — IdeaBrowser`;
+  const description = idea.tagline;
+  const url = `https://ideabrowser-three.vercel.app/idea/${idea.slug}`;
+
   return {
-    title: idea ? `${idea.name} — IdeaBrowser` : "IdeaBrowser",
-    description: idea?.tagline,
+    title,
+    description,
+    keywords: idea.tags,
+    openGraph: {
+      title,
+      description,
+      url,
+      type: "article" as const,
+      siteName: "IdeaBrowser",
+    },
+    twitter: {
+      card: "summary_large_image" as const,
+      title,
+      description,
+    },
   };
 }
 
@@ -43,12 +69,15 @@ export default async function IdeaPage({ params }: { params: Promise<{ slug: str
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-12 sm:px-6">
-      <Link
-        href="/"
-        className="mb-8 inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-white transition-colors"
-      >
-        &larr; Back to all ideas
-      </Link>
+      <div className="mb-8 flex items-center justify-between">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-white transition-colors"
+        >
+          &larr; Back to all ideas
+        </Link>
+        <ExportButton ideaId={idea.id} />
+      </div>
 
       {/* Header */}
       <div className="mb-8">
