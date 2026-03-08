@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { CATEGORIES, STATUS_CONFIG, type Category, type Status } from "@/lib/ideas";
 import Link from "next/link";
 
@@ -17,18 +19,94 @@ interface IdeaCardProps {
     voteCount: number;
     commentCount: number;
     hasAnalysis: boolean;
+    relevance?: number;
+    matchReason?: string;
   };
+  isBookmarked?: boolean;
+  onBookmarkToggle?: (ideaId: number, bookmarked: boolean) => void;
 }
 
-export function IdeaCard({ idea }: IdeaCardProps) {
+export function IdeaCard({ idea, isBookmarked = false, onBookmarkToggle }: IdeaCardProps) {
+  const { data: session } = useSession();
+  const [bookmarked, setBookmarked] = useState(isBookmarked);
+  const [bookmarkLoading, setBookmarkLoading] = useState(false);
+
+  // Sync with parent prop when bookmarks load asynchronously
+  useEffect(() => {
+    setBookmarked(isBookmarked);
+  }, [isBookmarked]);
+
   const cat = CATEGORIES[idea.category as Category] || { label: idea.category, color: "#6366f1" };
   const status = STATUS_CONFIG[idea.status as Status] || { label: idea.status, color: "#94a3b8", emoji: "?" };
+
+  async function handleBookmark(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!session?.user || bookmarkLoading) return;
+
+    setBookmarkLoading(true);
+    try {
+      const res = await fetch("/api/bookmarks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ideaId: idea.id }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setBookmarked(data.bookmarked);
+      onBookmarkToggle?.(idea.id, data.bookmarked);
+    } catch {
+      // Silently fail — bookmark state unchanged
+    } finally {
+      setBookmarkLoading(false);
+    }
+  }
 
   return (
     <Link
       href={`/idea/${idea.slug}`}
-      className="group block rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 transition-all hover:border-zinc-600 hover:bg-zinc-900"
+      className="group relative block rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 transition-all hover:border-zinc-600 hover:bg-zinc-900"
     >
+      {/* Bookmark button */}
+      {session?.user && (
+        <button
+          onClick={handleBookmark}
+          disabled={bookmarkLoading}
+          className={`absolute right-4 top-4 z-10 rounded-lg p-1.5 transition-colors ${
+            bookmarked
+              ? "text-amber-400 hover:text-amber-300"
+              : "text-zinc-600 hover:text-zinc-400"
+          } ${bookmarkLoading ? "opacity-50" : ""}`}
+          title={bookmarked ? "Remove bookmark" : "Bookmark this idea"}
+        >
+          <svg
+            className="h-4 w-4"
+            fill={bookmarked ? "currentColor" : "none"}
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+            />
+          </svg>
+        </button>
+      )}
+
+      {/* Relevance badge for AI search results */}
+      {idea.relevance !== undefined && (
+        <div className="mb-3 flex items-center gap-2">
+          <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-400">
+            {idea.relevance}% match
+          </span>
+          {idea.matchReason && (
+            <span className="truncate text-xs text-zinc-500">{idea.matchReason}</span>
+          )}
+        </div>
+      )}
+
       <div className="mb-3 flex items-center justify-between">
         <span
           className="rounded-full px-3 py-1 text-xs font-medium"

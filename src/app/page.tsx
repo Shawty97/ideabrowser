@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { CATEGORIES, STATUS_CONFIG, type Category, type Status } from "@/lib/ideas";
 import { IdeaCard } from "@/components/idea-card";
@@ -32,6 +32,16 @@ interface IdeaFromAPI {
   analysisScore: number | null;
   aiGenerated?: boolean;
   createdAt?: string;
+  relevance?: number;
+  matchReason?: string;
+}
+
+interface PaginatedResponse {
+  ideas: IdeaFromAPI[];
+  total: number;
+  page: number;
+  totalPages: number;
+  hasMore: boolean;
 }
 
 function compositeScore(idea: IdeaFromAPI): number {
@@ -45,63 +55,168 @@ function compositeScore(idea: IdeaFromAPI): number {
   return analysisScoreComponent + voteComponent + recencyComponent + commentComponent;
 }
 
+const SORT_MAP: Record<SortOption, string> = {
+  hot: "hot",
+  new: "new",
+  "top-voted": "voted",
+  "highest-score": "score",
+};
+
 export default function HomePage() {
   const { data: session } = useSession();
   const [ideas, setIdeas] = useState<IdeaFromAPI[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [category, setCategory] = useState<Category | "all">("all");
   const [status, setStatus] = useState<Status | "all">("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOption>("hot");
+  const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
 
+  // AI search state
+  const [aiSearchEnabled, setAiSearchEnabled] = useState(false);
+  const [aiSearchLoading, setAiSearchLoading] = useState(false);
+  const [aiSearchResults, setAiSearchResults] = useState<IdeaFromAPI[] | null>(null);
+  const aiSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Bookmarks state
+  const [bookmarkedIds, setBookmarkedIds] = useState<Set<number>>(new Set());
+
+  // Intersection observer ref for infinite scroll
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Build URL params for API call
+  const buildApiUrl = useCallback(
+    (page: number) => {
+      const params = new URLSearchParams();
+      if (category !== "all") params.set("category", category);
+      if (status !== "all") params.set("status", status);
+      if (search && !aiSearchEnabled) params.set("search", search);
+      params.set("sort", SORT_MAP[sort]);
+      params.set("page", String(page));
+      params.set("limit", "20");
+      return `/api/ideas?${params.toString()}`;
+    },
+    [category, status, search, sort, aiSearchEnabled]
+  );
+
+  // Fetch initial page and reset
+  const fetchFirstPage = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(buildApiUrl(1));
+      const data: PaginatedResponse = await res.json();
+      setIdeas(data.ideas);
+      setTotalCount(data.total);
+      setCurrentPage(1);
+      setHasMore(data.hasMore);
+    } catch {
+      setIdeas([]);
+      setTotalCount(0);
+      setHasMore(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [buildApiUrl]);
+
+  // Fetch next page (append)
+  const fetchNextPage = useCallback(async () => {
+    if (loadingMore || !hasMore || aiSearchEnabled) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = currentPage + 1;
+      const res = await fetch(buildApiUrl(nextPage));
+      const data: PaginatedResponse = await res.json();
+      setIdeas((prev) => [...prev, ...data.ideas]);
+      setCurrentPage(nextPage);
+      setHasMore(data.hasMore);
+    } catch {
+      // silently fail, user can scroll again
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, currentPage, buildApiUrl, aiSearchEnabled]);
+
+  // Initial load
   useEffect(() => {
-    fetch("/api/ideas")
+    fetchFirstPage();
+  }, [fetchFirstPage]);
+
+  // Fetch bookmarked IDs for current user
+  useEffect(() => {
+    if (!session?.user) {
+      setBookmarkedIds(new Set());
+      return;
+    }
+    fetch("/api/bookmarks")
       .then((r) => r.json())
-      .then((data) => {
-        setIdeas(data);
-        setLoading(false);
+      .then((data: { ideas: Array<{ id: number }> }) => {
+        setBookmarkedIds(new Set(data.ideas.map((i) => i.id)));
       })
-      .catch(() => setLoading(false));
-  }, []);
+      .catch(() => setBookmarkedIds(new Set()));
+  }, [session?.user]);
 
-  const filtered = useMemo(() => {
-    let result = ideas.filter((idea) => {
-      if (category !== "all" && idea.category !== category) return false;
-      if (status !== "all" && idea.status !== status) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        return (
-          idea.name.toLowerCase().includes(q) ||
-          idea.tagline.toLowerCase().includes(q) ||
-          idea.description.toLowerCase().includes(q) ||
-          idea.tags.some((t) => t.includes(q))
-        );
-      }
-      return true;
-    });
-
-    // Sort
-    switch (sort) {
-      case "hot":
-        result = [...result].sort((a, b) => compositeScore(b) - compositeScore(a));
-        break;
-      case "new":
-        result = [...result].sort((a, b) => {
-          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-          return bTime - aTime;
-        });
-        break;
-      case "top-voted":
-        result = [...result].sort((a, b) => b.voteCount - a.voteCount);
-        break;
-      case "highest-score":
-        result = [...result].sort((a, b) => (b.analysisScore ?? 0) - (a.analysisScore ?? 0));
-        break;
+  // AI search with debounce
+  useEffect(() => {
+    if (!aiSearchEnabled || !search || search.trim().length < 2) {
+      setAiSearchResults(null);
+      return;
     }
 
-    return result;
-  }, [ideas, category, status, search, sort]);
+    // Debounce 500ms
+    if (aiSearchTimerRef.current) {
+      clearTimeout(aiSearchTimerRef.current);
+    }
+
+    aiSearchTimerRef.current = setTimeout(async () => {
+      setAiSearchLoading(true);
+      try {
+        const res = await fetch(`/api/ideas/search?q=${encodeURIComponent(search.trim())}`);
+        const data = await res.json();
+        setAiSearchResults(data.ideas ?? []);
+      } catch {
+        setAiSearchResults([]);
+      } finally {
+        setAiSearchLoading(false);
+      }
+    }, 500);
+
+    return () => {
+      if (aiSearchTimerRef.current) {
+        clearTimeout(aiSearchTimerRef.current);
+      }
+    };
+  }, [search, aiSearchEnabled]);
+
+  // Clear AI search results when toggling off
+  useEffect(() => {
+    if (!aiSearchEnabled) {
+      setAiSearchResults(null);
+    }
+  }, [aiSearchEnabled]);
+
+  // IntersectionObserver for infinite scroll
+  useEffect(() => {
+    if (!loadMoreRef.current || aiSearchEnabled) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMore && !loadingMore) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(loadMoreRef.current);
+
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, fetchNextPage, aiSearchEnabled]);
+
+  // Determine what to show: AI search results or paginated ideas
+  const displayIdeas = aiSearchEnabled && aiSearchResults !== null ? aiSearchResults : ideas;
 
   const trending = useMemo(() => {
     return [...ideas]
@@ -114,8 +229,20 @@ export default function HomePage() {
     const withAnalysis = ideas.filter((i) => i.hasAnalysis).length;
     const categories = new Set(ideas.map((i) => i.category)).size;
     const aiGenCount = ideas.filter((i) => i.aiGenerated).length;
-    return { total: ideas.length, active, analyzed: withAnalysis, categories, aiGenerated: aiGenCount };
-  }, [ideas]);
+    return { total: totalCount, active, analyzed: withAnalysis, categories, aiGenerated: aiGenCount };
+  }, [ideas, totalCount]);
+
+  function handleBookmarkToggle(ideaId: number, bookmarked: boolean) {
+    setBookmarkedIds((prev) => {
+      const next = new Set(prev);
+      if (bookmarked) {
+        next.add(ideaId);
+      } else {
+        next.delete(ideaId);
+      }
+      return next;
+    });
+  }
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
@@ -127,6 +254,14 @@ export default function HomePage() {
           </span>
         </div>
         <div className="flex items-center gap-3">
+          {session?.user && (
+            <Link
+              href="/bookmarks"
+              className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
+            >
+              Bookmarks
+            </Link>
+          )}
           <Link
             href="/generate"
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 transition-colors"
@@ -190,7 +325,7 @@ export default function HomePage() {
       </div>
 
       {/* Trending This Week */}
-      {!loading && trending.length > 0 && (
+      {!loading && trending.length > 0 && !aiSearchEnabled && (
         <div className="mb-10">
           <h2 className="mb-4 text-lg font-bold text-white">Trending This Week</h2>
           <div className="grid gap-3 sm:grid-cols-5">
@@ -216,26 +351,37 @@ export default function HomePage() {
       )}
 
       {/* Sort Tabs */}
-      <div className="mb-6 flex gap-1 rounded-lg bg-zinc-900/50 p-1 border border-zinc-800 w-fit">
-        {([
-          { key: "hot" as const, label: "Hot" },
-          { key: "new" as const, label: "New" },
-          { key: "top-voted" as const, label: "Top Voted" },
-          { key: "highest-score" as const, label: "Highest Score" },
-        ]).map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setSort(tab.key)}
-            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              sort === tab.key
-                ? "bg-indigo-600 text-white"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-800"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {!aiSearchEnabled && (
+        <div className="mb-6 flex gap-1 rounded-lg bg-zinc-900/50 p-1 border border-zinc-800 w-fit">
+          {([
+            { key: "hot" as const, label: "Hot" },
+            { key: "new" as const, label: "New" },
+            { key: "top-voted" as const, label: "Top Voted" },
+            { key: "highest-score" as const, label: "Highest Score" },
+          ]).map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setSort(tab.key)}
+              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                sort === tab.key
+                  ? "bg-indigo-600 text-white"
+                  : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* AI Search active indicator */}
+      {aiSearchEnabled && aiSearchResults !== null && (
+        <div className="mb-6 rounded-lg border border-emerald-800/50 bg-emerald-950/30 px-4 py-3">
+          <p className="text-sm text-emerald-400">
+            AI Semantic Search results for &quot;{search}&quot; &mdash; {aiSearchResults.length} matches found, sorted by relevance
+          </p>
+        </div>
+      )}
 
       {/* Filters */}
       <Filters
@@ -245,7 +391,10 @@ export default function HomePage() {
         onCategoryChange={setCategory}
         onStatusChange={setStatus}
         onSearchChange={setSearch}
-        resultCount={filtered.length}
+        resultCount={displayIdeas.length}
+        aiSearchEnabled={aiSearchEnabled}
+        onAiSearchToggle={setAiSearchEnabled}
+        aiSearchLoading={aiSearchLoading}
       />
 
       {/* Grid */}
@@ -260,9 +409,13 @@ export default function HomePage() {
             </div>
           ))}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : displayIdeas.length === 0 ? (
         <div className="py-20 text-center">
-          <p className="text-zinc-500 mb-4">No ideas match your filters. Try adjusting your search.</p>
+          <p className="text-zinc-500 mb-4">
+            {aiSearchEnabled
+              ? "No ideas match your AI search. Try a different query."
+              : "No ideas match your filters. Try adjusting your search."}
+          </p>
           <Link
             href="/generate"
             className="inline-flex rounded-lg bg-indigo-600 px-6 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
@@ -272,9 +425,29 @@ export default function HomePage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((idea) => (
-            <IdeaCard key={idea.id} idea={idea} />
+          {displayIdeas.map((idea) => (
+            <IdeaCard
+              key={idea.id}
+              idea={idea}
+              isBookmarked={bookmarkedIds.has(idea.id)}
+              onBookmarkToggle={handleBookmarkToggle}
+            />
           ))}
+        </div>
+      )}
+
+      {/* Infinite scroll sentinel + loading spinner */}
+      {!aiSearchEnabled && (
+        <div ref={loadMoreRef} className="mt-8 flex justify-center">
+          {loadingMore && (
+            <div className="flex items-center gap-3 text-zinc-500">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+              <span className="text-sm">Loading more ideas...</span>
+            </div>
+          )}
+          {!hasMore && ideas.length > 0 && !loading && (
+            <p className="text-sm text-zinc-600">All {totalCount} ideas loaded</p>
+          )}
         </div>
       )}
 

@@ -21,6 +21,7 @@ model User {
   submissions    Idea[]           @relation("SubmittedIdeas")
   analyses       Analysis[]
   generationRuns GenerationRun[]
+  bookmarks      Bookmark[]
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
@@ -89,6 +90,7 @@ model Idea {
   votes        Vote[]
   comments     Comment[]
   analyses     Analysis[]
+  bookmarks    Bookmark[]
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -152,4 +154,16 @@ model GenerationRun {
   createdAt      DateTime @default(now())
 
   @@map("ib_generation_runs")
+}
+
+model Bookmark {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ideaId    Int
+  idea      Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, ideaId])
+  @@map("ib_bookmarks")
 }

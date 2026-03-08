@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 
-// GET /api/ideas — list all ideas with vote counts and sorting
+// GET /api/ideas — list ideas with vote counts, sorting, and pagination
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const category = searchParams.get("category");
   const status = searchParams.get("status");
   const search = searchParams.get("search");
   const sort = searchParams.get("sort") || "new";
+  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {};
@@ -23,6 +25,11 @@ export async function GET(req: NextRequest) {
     ];
   }
 
+  // Get total count for pagination metadata
+  const total = await prisma.idea.count({ where });
+
+  // For "new" sort, use DB-level pagination for performance
+  const useDbPagination = sort === "new";
   const ideas = await prisma.idea.findMany({
     where,
     include: {
@@ -31,6 +38,7 @@ export async function GET(req: NextRequest) {
       _count: { select: { comments: true, analyses: true } },
     },
     orderBy: sort === "new" ? { createdAt: "desc" } : { id: "asc" },
+    ...(useDbPagination && { skip: (page - 1) * limit, take: limit }),
   });
 
   const now = Date.now();
@@ -61,6 +69,7 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  // Apply sorting
   switch (sort) {
     case "hot":
       result.sort((a, b) => b.compositeScore - a.compositeScore);
@@ -76,7 +85,20 @@ export async function GET(req: NextRequest) {
       break;
   }
 
-  return NextResponse.json(result);
+  // Apply pagination after sorting (skip for "new" — already paginated via DB)
+  const totalPages = Math.ceil(total / limit);
+  const paginatedIdeas = useDbPagination
+    ? result
+    : result.slice((page - 1) * limit, (page - 1) * limit + limit);
+  const hasMore = page < totalPages;
+
+  return NextResponse.json({
+    ideas: paginatedIdeas,
+    total,
+    page,
+    totalPages,
+    hasMore,
+  });
 }
 
 // POST /api/ideas — submit a new idea (authenticated)
