@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { CATEGORIES, STATUS_CONFIG, type Category } from "@/lib/ideas";
+import { EcosystemFooter } from "@/components/ecosystem-footer";
 import Link from "next/link";
 
 export default function SubmitPage() {
@@ -105,6 +106,8 @@ export default function SubmitPage() {
           {submitting ? "Submitting..." : "Submit Idea"}
         </button>
       </form>
+
+      <EcosystemFooter />
     </main>
   );
 }

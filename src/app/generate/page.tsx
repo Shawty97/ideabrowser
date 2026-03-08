@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { IdeaCard } from "@/components/idea-card";
 import { UserMenu } from "@/components/user-menu";
+import { EcosystemFooter } from "@/components/ecosystem-footer";
 import Link from "next/link";
 
 const BUDGET_OPTIONS = [
@@ -318,21 +319,8 @@ export default function GeneratePage() {
         </div>
       )}
 
-      {/* Footer */}
-      <footer className="mt-16 border-t border-zinc-800 pt-8 text-center text-sm text-zinc-600">
-        <div className="flex flex-wrap justify-center gap-4 mb-3">
-          <a href="https://a-impact.io" className="text-indigo-500 hover:underline">A-Impact</a>
-          <span className="text-zinc-700">|</span>
-          <a href="https://business-os-v2-mu.vercel.app" className="text-zinc-500 hover:text-zinc-300">Business OS</a>
-          <span className="text-zinc-700">|</span>
-          <a href="https://colony.a-impact.io" className="text-zinc-500 hover:text-zinc-300">Colony</a>
-        </div>
-        <p>
-          IdeaBrowser by{" "}
-          <a href="https://a-impact.io" className="text-indigo-500 hover:underline">A-Impact</a>{" "}
-          — AI Departments as a Service
-        </p>
-      </footer>
+      {/* Ecosystem Footer */}
+      <EcosystemFooter />
     </main>
   );
 }

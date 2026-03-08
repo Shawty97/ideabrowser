@@ -4,6 +4,7 @@ import { CATEGORIES, STATUS_CONFIG, type Category, type Status } from "@/lib/ide
 import { AnalysisPanel } from "@/components/analysis-panel";
 import { VoteButton } from "@/components/vote-button";
 import { CommentSection } from "@/components/comment-section";
+import { EcosystemFooter } from "@/components/ecosystem-footer";
 import { auth } from "@/lib/auth";
 import Link from "next/link";
 
@@ -137,7 +138,7 @@ export default async function IdeaPage({ params }: { params: Promise<{ slug: str
           Use Business OS to generate your complete business blueprint in 90 seconds.
         </p>
         <a
-          href={`https://business-os-v2-mu.vercel.app?idea=${encodeURIComponent(idea.name)}&tagline=${encodeURIComponent(idea.tagline)}`}
+          href={`https://business-os-v2-mu.vercel.app?idea=${encodeURIComponent(idea.name)}&tagline=${encodeURIComponent(idea.tagline)}&market=${encodeURIComponent(idea.targetMarket)}&pricing=${encodeURIComponent(idea.pricing)}&category=${encodeURIComponent(idea.category)}&stack=${encodeURIComponent(idea.stack.join(","))}&revenue=${encodeURIComponent(idea.revenueModel)}&source=ideabrowser`}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex rounded-xl bg-indigo-600 px-6 py-3 font-semibold text-white hover:bg-indigo-500 transition-colors"
@@ -146,25 +147,8 @@ export default async function IdeaPage({ params }: { params: Promise<{ slug: str
         </a>
       </div>
 
-      {/* Footer */}
-      <footer className="mt-12 border-t border-zinc-800 pt-6 text-center text-sm text-zinc-600">
-        <div className="flex flex-wrap justify-center gap-4 mb-3">
-          <a href="https://a-impact.io" className="text-indigo-500 hover:underline">A-Impact</a>
-          <span className="text-zinc-700">|</span>
-          <a href="https://business-os-v2-mu.vercel.app" className="text-zinc-500 hover:text-zinc-300">Business OS</a>
-          <span className="text-zinc-700">|</span>
-          <a href="https://colony.a-impact.io" className="text-zinc-500 hover:text-zinc-300">Colony</a>
-          <span className="text-zinc-700">|</span>
-          <a href="https://robert-kopi.com" className="text-zinc-500 hover:text-zinc-300">Robert Kopi</a>
-        </div>
-        <p>
-          IdeaBrowser by{" "}
-          <a href="https://a-impact.io" className="text-indigo-500 hover:underline">
-            A-Impact
-          </a>{" "}
-          — AI Departments as a Service
-        </p>
-      </footer>
+      {/* Ecosystem Footer */}
+      <EcosystemFooter />
     </main>
   );
 }

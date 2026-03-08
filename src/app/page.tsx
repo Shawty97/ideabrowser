@@ -6,6 +6,7 @@ import { CATEGORIES, STATUS_CONFIG, type Category, type Status } from "@/lib/ide
 import { IdeaCard } from "@/components/idea-card";
 import { Filters } from "@/components/filters";
 import { UserMenu } from "@/components/user-menu";
+import { EcosystemFooter } from "@/components/ecosystem-footer";
 import Link from "next/link";
 
 type SortOption = "hot" | "new" | "top-voted" | "highest-score";
@@ -214,31 +215,38 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Sort + Filters */}
-      <div className="mb-4 flex items-center justify-between">
-        <Filters
-          selectedCategory={category}
-          selectedStatus={status}
-          searchQuery={search}
-          onCategoryChange={setCategory}
-          onStatusChange={setStatus}
-          onSearchChange={setSearch}
-          resultCount={filtered.length}
-        />
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-zinc-500">Sort:</label>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortOption)}
-            className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-white focus:border-indigo-500 focus:outline-none"
+      {/* Sort Tabs */}
+      <div className="mb-6 flex gap-1 rounded-lg bg-zinc-900/50 p-1 border border-zinc-800 w-fit">
+        {([
+          { key: "hot" as const, label: "Hot" },
+          { key: "new" as const, label: "New" },
+          { key: "top-voted" as const, label: "Top Voted" },
+          { key: "highest-score" as const, label: "Highest Score" },
+        ]).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setSort(tab.key)}
+            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              sort === tab.key
+                ? "bg-indigo-600 text-white"
+                : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+            }`}
           >
-            <option value="hot">Hot</option>
-            <option value="new">New</option>
-            <option value="top-voted">Top Voted</option>
-            <option value="highest-score">Highest Score</option>
-          </select>
-        </div>
+            {tab.label}
+          </button>
+        ))}
       </div>
+
+      {/* Filters */}
+      <Filters
+        selectedCategory={category}
+        selectedStatus={status}
+        searchQuery={search}
+        onCategoryChange={setCategory}
+        onStatusChange={setStatus}
+        onSearchChange={setSearch}
+        resultCount={filtered.length}
+      />
 
       {/* Grid */}
       {loading ? (
@@ -270,25 +278,8 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Footer */}
-      <footer className="mt-16 border-t border-zinc-800 pt-8 text-center text-sm text-zinc-600">
-        <div className="flex flex-wrap justify-center gap-4 mb-3">
-          <a href="https://a-impact.io" className="text-indigo-500 hover:underline">A-Impact</a>
-          <span className="text-zinc-700">|</span>
-          <a href="https://business-os-v2-mu.vercel.app" className="text-zinc-500 hover:text-zinc-300">Business OS</a>
-          <span className="text-zinc-700">|</span>
-          <a href="https://colony.a-impact.io" className="text-zinc-500 hover:text-zinc-300">Colony</a>
-          <span className="text-zinc-700">|</span>
-          <a href="https://robert-kopi.com" className="text-zinc-500 hover:text-zinc-300">Robert Kopi</a>
-        </div>
-        <p>
-          IdeaBrowser by{" "}
-          <a href="https://a-impact.io" className="text-indigo-500 hover:underline">
-            A-Impact
-          </a>{" "}
-          — AI Departments as a Service
-        </p>
-      </footer>
+      {/* Ecosystem Footer */}
+      <EcosystemFooter />
     </main>
   );
 }
