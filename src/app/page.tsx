@@ -7,6 +7,11 @@ import { IdeaCard } from "@/components/idea-card";
 import { Filters } from "@/components/filters";
 import { UserMenu } from "@/components/user-menu";
 import { EcosystemFooter } from "@/components/ecosystem-footer";
+import { LandingHero } from "@/components/landing-hero";
+import { StatsSection } from "@/components/stats-section";
+import { HowItWorks } from "@/components/how-it-works";
+import { FeaturedIdeas } from "@/components/featured-ideas";
+import { LandingCta } from "@/components/landing-cta";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -64,7 +69,7 @@ const SORT_MAP: Record<SortOption, string> = {
 };
 
 export default function HomePage() {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const [ideas, setIdeas] = useState<IdeaFromAPI[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -91,6 +96,8 @@ export default function HomePage() {
 
   // Intersection observer ref for infinite scroll
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  const isLoggedOut = !session?.user;
 
   // Build URL params for API call
   const buildApiUrl = useCallback(
@@ -271,8 +278,13 @@ export default function HomePage() {
       {/* Top Bar */}
       <div className="mb-8 flex items-center justify-between">
         <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2">
+            <span className="text-xl font-black text-white">
+              Idea<span className="text-indigo-500">Browser</span>
+            </span>
+          </Link>
           <span className="rounded-full bg-indigo-500/10 px-3 py-1 text-xs text-indigo-400">
-            Powered by A-Impact
+            by A-Impact
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -302,178 +314,209 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Hero */}
-      <div className="mb-12 text-center">
-        <h1 className="mb-4 text-5xl font-black tracking-tight text-white sm:text-6xl">
-          Idea<span className="text-indigo-500">Browser</span>
-        </h1>
-        <p className="mx-auto max-w-2xl text-lg text-zinc-400">
-          {stats.total} AI business ideas with deep market analysis,
-          revenue projections, and instant build capability via Business OS.
-        </p>
+      {/* Landing Sections -- shown only for logged-out users */}
+      {isLoggedOut && (
+        <>
+          <LandingHero />
+          <StatsSection />
+          <HowItWorks />
+          <FeaturedIdeas />
+          <LandingCta />
 
-        {/* Generate CTA */}
-        <div className="mt-6">
-          <Link
-            href="/generate"
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-emerald-600 px-8 py-3 font-semibold text-white hover:from-indigo-500 hover:to-emerald-500 transition-all"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            Generate Custom Ideas with AI
-          </Link>
-        </div>
+          {/* Divider before browse section */}
+          <div className="my-12 border-t border-zinc-800" />
+        </>
+      )}
 
-        {/* Stats */}
-        <div className="mt-8 flex justify-center gap-8">
-          <div className="text-center">
-            <div className="text-3xl font-bold text-white">{stats.total}</div>
-            <div className="text-sm text-zinc-500">Ideas</div>
-          </div>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-green-400">{stats.active}</div>
-            <div className="text-sm text-zinc-500">Active</div>
-          </div>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-indigo-400">{stats.analyzed}</div>
-            <div className="text-sm text-zinc-500">AI-Analyzed</div>
-          </div>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-amber-400">{stats.categories}</div>
-            <div className="text-sm text-zinc-500">Categories</div>
-          </div>
-        </div>
-      </div>
+      {/* Browse Section */}
+      <div id="ideas-grid">
+        {/* Hero -- only for logged-in users (compact version) */}
+        {!isLoggedOut && (
+          <div className="mb-12 text-center">
+            <h1 className="mb-4 text-5xl font-black tracking-tight text-white sm:text-6xl">
+              Idea<span className="text-indigo-500">Browser</span>
+            </h1>
+            <p className="mx-auto max-w-2xl text-lg text-zinc-400">
+              {stats.total} AI business ideas with deep market analysis,
+              revenue projections, and instant build capability via Business OS.
+            </p>
 
-      {/* Trending This Week */}
-      {!loading && trending.length > 0 && !aiSearchEnabled && (
-        <div className="mb-10">
-          <h2 className="mb-4 text-lg font-bold text-white">Trending This Week</h2>
-          <div className="grid gap-3 sm:grid-cols-5">
-            {trending.map((idea, i) => (
+            {/* Generate CTA */}
+            <div className="mt-6">
               <Link
-                key={idea.id}
-                href={`/idea/${idea.slug}`}
-                className="group flex items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 hover:border-zinc-600 transition-colors"
+                href="/generate"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-emerald-600 px-8 py-3 font-semibold text-white hover:from-indigo-500 hover:to-emerald-500 transition-all"
               >
-                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 text-xs font-bold text-indigo-400">
-                  {i + 1}
-                </span>
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-white group-hover:text-indigo-400 transition-colors">
-                    {idea.name}
-                  </div>
-                  <div className="truncate text-xs text-zinc-500">{idea.tagline}</div>
-                </div>
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Generate Custom Ideas with AI
               </Link>
+            </div>
+
+            {/* Stats */}
+            <div className="mt-8 flex justify-center gap-8">
+              <div className="text-center">
+                <div className="text-3xl font-bold text-white">{stats.total}</div>
+                <div className="text-sm text-zinc-500">Ideas</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold text-green-400">{stats.active}</div>
+                <div className="text-sm text-zinc-500">Active</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold text-indigo-400">{stats.analyzed}</div>
+                <div className="text-sm text-zinc-500">AI-Analyzed</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold text-amber-400">{stats.categories}</div>
+                <div className="text-sm text-zinc-500">Categories</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Section header for logged-out browse */}
+        {isLoggedOut && (
+          <div className="mb-8 text-center">
+            <h2 className="mb-2 text-3xl font-bold text-white sm:text-4xl">
+              Browse All Ideas
+            </h2>
+            <p className="text-zinc-400">
+              {stats.total} startup ideas and counting. Filter, search, and explore.
+            </p>
+          </div>
+        )}
+
+        {/* Trending This Week */}
+        {!loading && trending.length > 0 && !aiSearchEnabled && !isLoggedOut && (
+          <div className="mb-10">
+            <h2 className="mb-4 text-lg font-bold text-white">Trending This Week</h2>
+            <div className="grid gap-3 sm:grid-cols-5">
+              {trending.map((idea, i) => (
+                <Link
+                  key={idea.id}
+                  href={`/idea/${idea.slug}`}
+                  className="group flex items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 hover:border-zinc-600 transition-colors"
+                >
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 text-xs font-bold text-indigo-400">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-white group-hover:text-indigo-400 transition-colors">
+                      {idea.name}
+                    </div>
+                    <div className="truncate text-xs text-zinc-500">{idea.tagline}</div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Sort Tabs */}
+        {!aiSearchEnabled && (
+          <div className="mb-6 flex gap-1 rounded-lg bg-zinc-900/50 p-1 border border-zinc-800 w-fit">
+            {([
+              { key: "hot" as const, label: "Hot" },
+              { key: "new" as const, label: "New" },
+              { key: "top-voted" as const, label: "Top Voted" },
+              { key: "highest-score" as const, label: "Highest Score" },
+            ]).map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setSort(tab.key)}
+                className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                  sort === tab.key
+                    ? "bg-indigo-600 text-white"
+                    : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                }`}
+              >
+                {tab.label}
+              </button>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Sort Tabs */}
-      {!aiSearchEnabled && (
-        <div className="mb-6 flex gap-1 rounded-lg bg-zinc-900/50 p-1 border border-zinc-800 w-fit">
-          {([
-            { key: "hot" as const, label: "Hot" },
-            { key: "new" as const, label: "New" },
-            { key: "top-voted" as const, label: "Top Voted" },
-            { key: "highest-score" as const, label: "Highest Score" },
-          ]).map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setSort(tab.key)}
-              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                sort === tab.key
-                  ? "bg-indigo-600 text-white"
-                  : "text-zinc-400 hover:text-white hover:bg-zinc-800"
-              }`}
+        {/* AI Search active indicator */}
+        {aiSearchEnabled && aiSearchResults !== null && (
+          <div className="mb-6 rounded-lg border border-emerald-800/50 bg-emerald-950/30 px-4 py-3">
+            <p className="text-sm text-emerald-400">
+              AI Semantic Search results for &quot;{search}&quot; &mdash; {aiSearchResults.length} matches found, sorted by relevance
+            </p>
+          </div>
+        )}
+
+        {/* Filters */}
+        <Filters
+          selectedCategory={category}
+          selectedStatus={status}
+          searchQuery={search}
+          onCategoryChange={setCategory}
+          onStatusChange={setStatus}
+          onSearchChange={setSearch}
+          resultCount={displayIdeas.length}
+          aiSearchEnabled={aiSearchEnabled}
+          onAiSearchToggle={setAiSearchEnabled}
+          aiSearchLoading={aiSearchLoading}
+        />
+
+        {/* Grid */}
+        {loading ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+                <div className="mb-3 h-6 w-24 rounded-full bg-zinc-800" />
+                <div className="mb-2 h-6 w-3/4 rounded bg-zinc-800" />
+                <div className="mb-4 h-4 w-full rounded bg-zinc-800" />
+                <div className="h-16 rounded bg-zinc-800" />
+              </div>
+            ))}
+          </div>
+        ) : displayIdeas.length === 0 ? (
+          <div className="py-20 text-center">
+            <p className="text-zinc-500 mb-4">
+              {aiSearchEnabled
+                ? "No ideas match your AI search. Try a different query."
+                : "No ideas match your filters. Try adjusting your search."}
+            </p>
+            <Link
+              href="/generate"
+              className="inline-flex rounded-lg bg-indigo-600 px-6 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
             >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      )}
+              Generate Custom Ideas
+            </Link>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {displayIdeas.map((idea) => (
+              <IdeaCard
+                key={idea.id}
+                idea={idea}
+                isBookmarked={bookmarkedIds.has(idea.id)}
+                onBookmarkToggle={handleBookmarkToggle}
+                isComparing={compareIds.has(idea.id)}
+                onCompareToggle={handleCompareToggle}
+              />
+            ))}
+          </div>
+        )}
 
-      {/* AI Search active indicator */}
-      {aiSearchEnabled && aiSearchResults !== null && (
-        <div className="mb-6 rounded-lg border border-emerald-800/50 bg-emerald-950/30 px-4 py-3">
-          <p className="text-sm text-emerald-400">
-            AI Semantic Search results for &quot;{search}&quot; &mdash; {aiSearchResults.length} matches found, sorted by relevance
-          </p>
-        </div>
-      )}
-
-      {/* Filters */}
-      <Filters
-        selectedCategory={category}
-        selectedStatus={status}
-        searchQuery={search}
-        onCategoryChange={setCategory}
-        onStatusChange={setStatus}
-        onSearchChange={setSearch}
-        resultCount={displayIdeas.length}
-        aiSearchEnabled={aiSearchEnabled}
-        onAiSearchToggle={setAiSearchEnabled}
-        aiSearchLoading={aiSearchLoading}
-      />
-
-      {/* Grid */}
-      {loading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
-              <div className="mb-3 h-6 w-24 rounded-full bg-zinc-800" />
-              <div className="mb-2 h-6 w-3/4 rounded bg-zinc-800" />
-              <div className="mb-4 h-4 w-full rounded bg-zinc-800" />
-              <div className="h-16 rounded bg-zinc-800" />
-            </div>
-          ))}
-        </div>
-      ) : displayIdeas.length === 0 ? (
-        <div className="py-20 text-center">
-          <p className="text-zinc-500 mb-4">
-            {aiSearchEnabled
-              ? "No ideas match your AI search. Try a different query."
-              : "No ideas match your filters. Try adjusting your search."}
-          </p>
-          <Link
-            href="/generate"
-            className="inline-flex rounded-lg bg-indigo-600 px-6 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
-          >
-            Generate Custom Ideas
-          </Link>
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {displayIdeas.map((idea) => (
-            <IdeaCard
-              key={idea.id}
-              idea={idea}
-              isBookmarked={bookmarkedIds.has(idea.id)}
-              onBookmarkToggle={handleBookmarkToggle}
-              isComparing={compareIds.has(idea.id)}
-              onCompareToggle={handleCompareToggle}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Infinite scroll sentinel + loading spinner */}
-      {!aiSearchEnabled && (
-        <div ref={loadMoreRef} className="mt-8 flex justify-center">
-          {loadingMore && (
-            <div className="flex items-center gap-3 text-zinc-500">
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-              <span className="text-sm">Loading more ideas...</span>
-            </div>
-          )}
-          {!hasMore && ideas.length > 0 && !loading && (
-            <p className="text-sm text-zinc-600">All {totalCount} ideas loaded</p>
-          )}
-        </div>
-      )}
+        {/* Infinite scroll sentinel + loading spinner */}
+        {!aiSearchEnabled && (
+          <div ref={loadMoreRef} className="mt-8 flex justify-center">
+            {loadingMore && (
+              <div className="flex items-center gap-3 text-zinc-500">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+                <span className="text-sm">Loading more ideas...</span>
+              </div>
+            )}
+            {!hasMore && ideas.length > 0 && !loading && (
+              <p className="text-sm text-zinc-600">All {totalCount} ideas loaded</p>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Floating Compare Bar */}
       {compareIds.size >= 2 && (
