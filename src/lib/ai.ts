@@ -1,6 +1,15 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+let _groq: OpenAI | null = null;
+function getGroq(): OpenAI {
+  if (!_groq) {
+    _groq = new OpenAI({
+      apiKey: process.env.GROQ_API_KEY || "",
+      baseURL: "https://api.groq.com/openai/v1",
+    });
+  }
+  return _groq;
+}
 
 interface IdeaInput {
   name: string;
@@ -52,6 +61,18 @@ export interface AnalysisResult {
   score: number;
 }
 
+async function chatComplete(system: string, user: string, maxTokens = 4096): Promise<string> {
+  const response = await getGroq().chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    max_tokens: maxTokens,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+  });
+  return response.choices[0]?.message?.content ?? "";
+}
+
 export async function generateAnalysis(idea: IdeaInput): Promise<AnalysisResult> {
   const prompt = `Du bist ein erfahrener Business-Analyst und Venture-Stratege. Analysiere diese Geschäftsidee tiefgreifend.
 
@@ -81,13 +102,7 @@ Der Score (0-100) bewertet die Gesamtviabilität: Marktpotenzial (30%), Umsetzba
 
 WICHTIG: Antworte NUR mit dem JSON-Objekt, kein Markdown, keine Erklärungen.`;
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6-20250514",
-    max_tokens: 4000,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const text = await chatComplete("Du bist ein Business-Analyst.", prompt, 4000);
 
   try {
     const parsed = JSON.parse(text);
@@ -100,7 +115,6 @@ WICHTIG: Antworte NUR mit dem JSON-Objekt, kein Markdown, keine Erklärungen.`;
       score: Math.min(100, Math.max(0, Number(parsed.score) || 50)),
     };
   } catch {
-    // If JSON parsing fails, try to extract from potential markdown code block
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
@@ -170,13 +184,7 @@ Fokus auf DACH-Markt UND globale Chancen. Ideen müssen realistisch, differenzie
 Antworte NUR mit einem JSON-Array, kein Markdown, keine Erklärungen:
 [{ "name": "...", ... }, ...]`;
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6-20250514",
-    max_tokens: 8000,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const text = await chatComplete("Du bist ein Startup-Stratege.", prompt, 8000);
   const parsed = parseJsonFromResponse(text) as GeneratedIdea[];
 
   return parsed.map((idea) => ({
@@ -224,13 +232,7 @@ name, slug, tagline, description (100+ Wörter), category, status ("brainstorm")
 Antworte NUR mit einem JSON-Array:
 [{ "name": "...", ... }, ...]`;
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6-20250514",
-    max_tokens: 6000,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const text = await chatComplete("Du bist ein Startup-Stratege.", prompt, 6000);
   const parsed = parseJsonFromResponse(text) as GeneratedIdea[];
 
   return parsed.map((v) => ({

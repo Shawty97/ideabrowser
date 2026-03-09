@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+let _groq: OpenAI | null = null;
+function getGroq(): OpenAI {
+  if (!_groq) {
+    _groq = new OpenAI({
+      apiKey: process.env.GROQ_API_KEY || "",
+      baseURL: "https://api.groq.com/openai/v1",
+    });
+  }
+  return _groq;
+}
 
 interface SemanticMatch {
   id: number;
@@ -74,13 +83,16 @@ Nur IDs aus der obigen Liste verwenden. Maximal 10 Ergebnisse. Minimum relevance
 SUCHANFRAGE: "${query}"`;
 
   try {
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6-20250514",
+    const response = await getGroq().chat.completions.create({
+      model: "llama-3.3-70b-versatile",
       max_tokens: 1500,
-      messages: [{ role: "user", content: prompt }],
+      messages: [
+        { role: "system", content: "Du bist ein semantischer Such-Algorithmus." },
+        { role: "user", content: prompt },
+      ],
     });
 
-    const text = response.content[0].type === "text" ? response.content[0].text : "";
+    const text = response.choices[0]?.message?.content ?? "";
 
     let matches: SemanticMatch[];
     try {
